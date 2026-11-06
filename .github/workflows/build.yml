@@ -139,12 +139,13 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           BAZAAR_RSA_KEY: ${{ vars.BAZAAR_RSA_KEY }}
           MYKET_PUBLIC_KEY: ${{ vars.MYKET_PUBLIC_KEY }}
+          BAZAAR_DEVELOPER_ID: ${{ vars.BAZAAR_DEVELOPER_ID }}
         run: |
           mapfile -t STORES < <(node -e 'for(const s of [...require("./game.config.json").stores,"debug"]) console.log(s)')
           for STORE in "${STORES[@]}"; do
             export STORE
             # Isolate each store's native dependencies and key resources.
-            rm -rf android
+            if node -e 'process.exit(require("./game.config.json").nativeProject === "committed" ? 1 : 0)'; then rm -rf android; fi
             npm run build:android
           done
       - name: Verify installable package and signatures
