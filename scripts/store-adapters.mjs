@@ -36,7 +36,7 @@ export async function readStoreStatus(store,appId,token,{fetchImpl=fetch}={}) {
     for(const [field,path]of Object.entries({published:'last-published/',submitted:'last-committed/',draft:'last-uncommitted/'})) {
       const data=await api('GET',path);
       if(data.type==='success'&&data.release)result[field]=identity(data.release);
-      else if(data.type==='not-exists'||['error','success'].includes(data.type)&&data.release==null)result[field]=null;
+      else if(data.type==='not-exists'||data.type==='success'&&data.release==null)result[field]=null;
       else throw Error(`Unexpected Bazaar ${field} response (type=${String(data.type)}, fields=${Object.keys(data).join(',')}, release=${data.release===null?'null':typeof data.release})`);
     }
     return result;
