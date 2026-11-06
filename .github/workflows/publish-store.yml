@@ -4,6 +4,10 @@ on:
     - cron: '*/5 * * * *'
   workflow_dispatch:
     inputs:
+      refresh_all:
+        description: Refresh actual store status for all registered signed games (read only)
+        type: boolean
+        default: false
       status_game:
         description: Optional registered game to refresh store status (read only)
         type: string
@@ -45,6 +49,7 @@ jobs:
           STATUS_GAME: ${{ inputs.status_game }}
           REQUEST_ID: ${{ inputs.request_id }}
           APPROVAL_GAME: ${{ inputs.approval_game }}
+          REFRESH_ALL_STORES: ${{ inputs.refresh_all }}
   publish:
     needs: poll
     if: needs.poll.outputs.has_requests == 'true'

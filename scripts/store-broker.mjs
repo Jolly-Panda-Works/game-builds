@@ -19,7 +19,8 @@ if(process.argv[1]?.endsWith('store-broker.mjs')) {
     const requests=[...new Map(pending.filter(r=>/^[a-f0-9]{24}$/.test(r.id)&&games.some(g=>g.id===r.game&&g.enabled&&g.storePublishing?.enabled)).map(r=>[r.id,{id:r.id,game:r.game}])).values()];
     fs.appendFileSync(process.env.GITHUB_OUTPUT,`requests=${JSON.stringify(requests)}\nhas_requests=${requests.length>0}\n`);
     const status=await broker('status-pending');
-    const status_games=[...new Set([...status.map(r=>r.game),process.env.STATUS_GAME].filter(id=>games.some(g=>g.id===id&&g.enabled&&g.storePublishing?.enabled)))];
+    const all=process.env.REFRESH_ALL_STORES==='true'?games.filter(g=>g.enabled&&g.storePublishing?.enabled).map(g=>g.id):[];
+    const status_games=[...new Set([...status.map(r=>r.game),process.env.STATUS_GAME,...all].filter(id=>games.some(g=>g.id===id&&g.enabled&&g.storePublishing?.enabled)))];
     fs.appendFileSync(process.env.GITHUB_OUTPUT,`status_games=${JSON.stringify(status_games)}\nhas_status=${status_games.length>0}\n`);
   } else if(op==='offer') {
     await broker('offer',{repository:process.env.SOURCE_REPOSITORY,releaseId:Number(process.env.RELEASE_ID)});
