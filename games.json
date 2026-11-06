@@ -10,5 +10,29 @@
     "repository": "Jolly-Panda-Works/choo-choo-pop",
     "branch": "Iranian-store",
     "enabled": true
+  },
+  {
+    "id": "mini-sumo",
+    "repository": "Jolly-Panda-Works/mini-sumo",
+    "branch": "Iranian-store",
+    "enabled": true
+  },
+  {
+    "id": "grid-rush-web",
+    "repository": "Jolly-Panda-Works/grid-rush-web",
+    "branch": "Iranian-store",
+    "enabled": true
+  },
+  {
+    "id": "Pirate-s-Fortune",
+    "repository": "Jolly-Panda-Works/Pirate-s-Fortune",
+    "branch": "Iranian-store",
+    "enabled": true
+  },
+  {
+    "id": "vazeh-peykar-3d",
+    "repository": "Jolly-Panda-Works/vazeh-peykar-3d",
+    "branch": "Iranian-store",
+    "enabled": true
   }
 ]
