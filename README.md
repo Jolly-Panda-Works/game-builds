@@ -10,6 +10,8 @@ The workflows no longer use SOURCE_RELEASE_TOKEN or SOURCE_DEPLOY_KEY. Keep old 
 
 ## Each game
 
+For an end-to-end retest without modifying game source, run the build workflow manually with `rebuild=true`. It allocates the next version, builds fresh APKs and publishes a new source release; existing published tags/assets are never overwritten. Scheduled runs retain their normal skip-already-built behavior.
+
 Existing games can implement a custom `scripts/build.mjs` with `game.config.json.nativeProject=committed` to retain their established native project and application id. An empty `stores` list means Debug-only until an original release signing key is available; it must not cause a new release key to be invented. Mini Sumo retains its existing release secrets. Grid Rush retains its committed fixed debug keystore. Legacy application ids (including com.useffarahmand.vazehpeykar) are retained during migration. The smoke workflow's standalone-debug edition resolves the real launch activity from APK metadata, so applicationId suffixes do not change the activity namespace.
 
 Create a private repository from game-template with all branches. Set game.config.json: name, slug, appId=com.jollypanda.<slug>, optional web=true. main is development, Iranian-store is the build branch. Both stores use the same package and versionCode, and the same permanent per-game signing key.

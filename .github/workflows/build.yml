@@ -10,6 +10,10 @@ on:
         type: choice
         default: patch
         options: [patch, minor, major]
+      rebuild:
+        description: Build a new version even if the source revision already has a release
+        type: boolean
+        default: false
   schedule:
     - cron: '*/15 * * * *'
   push:
@@ -95,12 +99,13 @@ jobs:
         id: version
         env:
           BUMP: ${{ inputs.bump || 'patch' }}
+          REBUILD: ${{ inputs.rebuild || false }}
           GH_TOKEN: ${{ steps.app.outputs.token }}
         working-directory: source
         run: |
           SOURCE_SHA=$(git rev-parse HEAD)
           TAG=$(git tag --points-at HEAD | grep -E '^stores-v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
-          if [ -n "$TAG" ]; then VERSION="${TAG#stores-v}"; else VERSION=$(node scripts/version.mjs); fi
+          if [ -n "$TAG" ] && [ "$REBUILD" != true ]; then VERSION="${TAG#stores-v}"; else VERSION=$(node scripts/version.mjs); fi
           RELEASE="stores-v$VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
