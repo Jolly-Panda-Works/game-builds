@@ -34,6 +34,7 @@ jobs:
           if (!games.length) throw Error('No registered game selected');
           for (const g of games) {
             if (!/^[a-z0-9-]+$/.test(g.id)||!/^Jolly-Panda-Works\/[A-Za-z0-9_.-]+$/.test(g.repository)||g.branch!=='Iranian-store') throw Error('Invalid registration');
+            g.repositoryName=g.repository.split('/')[1];
           }
           fs.appendFileSync(process.env.GITHUB_OUTPUT,`games=${JSON.stringify(games)}\n`);
           JS
@@ -43,7 +44,7 @@ jobs:
     timeout-minutes: 40
     environment: ${{ matrix.game.id }}
     permissions:
-      contents: write
+      contents: read
     concurrency:
       group: game-${{ matrix.game.id }}
       cancel-in-progress: false
@@ -61,33 +62,48 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Read private game using its dedicated deploy key
+      - name: Create token scoped to this game only
+        id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.BUILD_APP_CLIENT_ID }}
+          private-key: ${{ secrets.BUILD_APP_PRIVATE_KEY }}
+          owner: Jolly-Panda-Works
+          repositories: ${{ matrix.game.repositoryName }}
+          permission-contents: write
+      - name: Read private game using the GitHub App
         uses: actions/checkout@v4
         with:
           repository: ${{ matrix.game.repository }}
           ref: ${{ matrix.game.branch }}
           path: source
           fetch-depth: 0
-          ssh-key: ${{ secrets.SOURCE_DEPLOY_KEY }}
+          token: ${{ steps.app.outputs.token }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Validate private release credentials before building
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          gh api "repos/$SOURCE_REPOSITORY" --silent
       - name: Resolve version and skip already published source
         id: version
         env:
           BUMP: ${{ inputs.bump || 'patch' }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
         working-directory: source
         run: |
           SOURCE_SHA=$(git rev-parse HEAD)
           TAG=$(git tag --points-at HEAD | grep -E '^stores-v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
           if [ -n "$TAG" ]; then VERSION="${TAG#stores-v}"; else VERSION=$(node scripts/version.mjs); fi
-          RELEASE="$GAME_ID-stores-v$VERSION"
+          RELEASE="stores-v$VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
           echo "tag=stores-v$VERSION" >> "$GITHUB_OUTPUT"
           echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
-          if gh release view "$RELEASE" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          if gh release view "$RELEASE" --repo "$SOURCE_REPOSITORY" >/dev/null 2>&1; then
             echo 'build=false' >> "$GITHUB_OUTPUT"
             echo "Already built: $RELEASE" >> "$GITHUB_STEP_SUMMARY"
           else
@@ -145,24 +161,23 @@ jobs:
         if: steps.version.outputs.build == 'true'
         working-directory: source
         env:
-          DEPLOY_KEY: ${{ secrets.SOURCE_DEPLOY_KEY }}
+          SOURCE_TOKEN: ${{ steps.app.outputs.token }}
           SOURCE_TAG: ${{ steps.version.outputs.tag }}
           SOURCE_SHA: ${{ steps.version.outputs.sha }}
         run: |
-          KEY="$RUNNER_TEMP/source-tag-key"
-          trap 'rm -f "$KEY"' EXIT
-          printf '%s\n' "$DEPLOY_KEY" > "$KEY"
-          chmod 600 "$KEY"
-          HOSTS="$RUNNER_TEMP/github-known-hosts"
-          gh api meta --jq '.ssh_keys[] | "github.com " + .' > "$HOSTS"
-          export GIT_SSH_COMMAND="ssh -i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOSTS"
+          AUTH=$(printf 'x-access-token:%s' "$SOURCE_TOKEN" | base64 -w0)
+          echo "::add-mask::$AUTH"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $AUTH"
           if ! git rev-parse "$SOURCE_TAG" >/dev/null 2>&1; then git tag "$SOURCE_TAG" "$SOURCE_SHA"; fi
-          git push "git@github.com:$SOURCE_REPOSITORY.git" "refs/tags/$SOURCE_TAG"
-      - name: Publish binaries in the public build repository
+          git push "https://github.com/$SOURCE_REPOSITORY.git" "refs/tags/$SOURCE_TAG"
+      - name: Publish binaries in the private game's releases
         if: steps.version.outputs.build == 'true'
         env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           RELEASE: ${{ steps.version.outputs.release }}
           SOURCE_SHA: ${{ steps.version.outputs.sha }}
         run: |
-          gh release create "$RELEASE" source/out/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$RELEASE" --notes "Android builds of $GAME_ID from private source revision $SOURCE_SHA. No store API was called."
-          echo "Release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE" >> "$GITHUB_STEP_SUMMARY"
+          gh release create "$RELEASE" source/out/* --repo "$SOURCE_REPOSITORY" --verify-tag --title "$RELEASE" --notes "Android builds of $GAME_ID from $SOURCE_BRANCH at $SOURCE_SHA. Built by $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. No store API was called."
+          echo "Release: https://github.com/$SOURCE_REPOSITORY/releases/tag/$RELEASE" >> "$GITHUB_STEP_SUMMARY"

@@ -1,13 +1,25 @@
-# Jolly Panda game builds
+# Jolly Panda Android builder
 
-Public build and binary-distribution repository for Jolly Panda Android games. Source repositories can remain private. No desktop builds. This repository NEVER submits releases to Bazaar or Myket.
+Build registered private games on public GitHub-hosted runners and publish binaries in each SOURCE game's Releases. No store API is called. Optional web archives are configured by each game; no desktop outputs exist.
 
-Register each game in games.json with its repository, unique id and Iranian-store branch. Create an environment named exactly that id. Environment secrets: `SOURCE_DEPLOY_KEY` (a dedicated read/write SSH deploy key installed ONLY on the source repository, write is needed to tag), `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`. Optional environment variables: BAZAAR_RSA_KEY, MYKET_PUBLIC_KEY. Each game has isolated credentials; no account-wide personal token is needed. Never accept arbitrary source repository or shell commands as workflow inputs.
+## Shared GitHub App
 
-The source must implement the game-template contract. Set its repository variable BUILD_MODE=central to disable duplicate private builds. Add topic tgbot to the builder and source repositories. Its private-source key must never be committed. Only trusted maintainers may edit source/build scripts. Public logs and released APKs/web bundles can expose packaged JavaScript/assets; they are not source-code encryption.
+Create an organization-owned private GitHub App. Disable webhooks and OAuth user authorization. Grant Contents read/write, keep other permissions off (Metadata read is implicit). Install on selected game repositories. Configure the builder repository variable BUILD_APP_CLIENT_ID and repository secret BUILD_APP_PRIVATE_KEY (entire PEM). Tokens are generated for one registered repository per job and revoked by the action afterward. If a target source commit changes workflows relative to the default branch, GitHub may additionally require Workflows write; do not grant unrelated permissions.
 
-The schedule polls registered branches every 15 minutes (GitHub may delay schedules). Manual Run workflow selects one registered game or all. Each game is serialized. A source revision with an existing completed release is skipped. Changes are built, Android package and signatures checked, the exact private source is tagged stores-vX.Y.Z, and APK/AAB/checksums are released here as <game-id>-stores-vX.Y.Z. A failed run before release can retry the same tagged version. Source tagging and public release use different scoped credentials.
+The workflows no longer use SOURCE_RELEASE_TOKEN or SOURCE_DEPLOY_KEY. Keep old credentials until the new App-based build succeeds, then revoke/remove credentials dedicated to this test. Do not run the old .local/setup-test.ps1 for new games.
 
-For a new game, replicate the environment and add a registration. This test uses a separate disposable TEST signing key, not any production game's signing key. Store API tokens are deliberately absent. The Android emulator smoke workflow downloads a Bazaar release APK, installs and launches it, checks its process, and saves a screenshot and logcat as evidence.
+## Each game
 
-GitHub currently documents free standard hosted runners in public repositories. Its terms also require workloads to relate to the repository's software project; this is the studio's game build/distribution project, but GitHub has not expressly guaranteed this private-source pattern. This test establishes technical behavior, not a permanent billing-policy guarantee. Self-hosted builds/private quota remain alternatives.
+Create a private repository from game-template with all branches. Set game.config.json: name, slug, appId=com.jollypanda.<slug>, optional web=true. main is development, Iranian-store is the build branch. Both stores use the same package and versionCode, and the same permanent per-game signing key.
+
+Run scripts/register-game.ps1 -GameId <id> -RepositoryName <repo-name>. This adds topic tgbot, sets BUILD_MODE=central to skip duplicate private builds, creates an environment, and updates LOCAL games.json. It does NOT install/authorize the App or create signing keys. Select the game in the App installation, then configure environment secrets KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD. Optional billing variables BAZAAR_RSA_KEY and MYKET_PUBLIC_KEY belong in that game's environment. Never reuse the disposable pipeline-test key for real games.
+
+Commit and push games.json after completing access and signing setup. Registered branches are polled about every 15 minutes; GitHub can delay schedules. Manual workflow dispatch accepts a registered game id or all. Each game's releases are serialized. Existing completed source releases are skipped. Successful builds validate APK package/signature, tag the exact source commit stores-vX.Y.Z and publish APK/AAB/checksums in the private source repository. The public builder receives no new binary releases. Old public test releases are retained until explicitly removed.
+
+The emulator workflow accepts a registered game id and a source release tag (e.g. stores-v0.1.0), downloads its Bazaar APK via the App, installs/launches it, and saves a screenshot/logcat evidence artifact.
+
+## Telegram and visibility
+
+Topic tgbot is a discovery convention, not authorization. The existing Telegram bot needs access to private source repositories to read their Releases. No duplicate Telegram sender is installed. Packaged JavaScript/assets inside APKs/web bundles remain extractable.
+
+GitHub documents free standard hosted runners in public repositories and requires workloads to relate to the repository's project. The test verifies technical operation, not a permanent billing-policy guarantee.

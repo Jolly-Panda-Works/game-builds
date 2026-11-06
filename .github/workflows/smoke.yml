@@ -2,27 +2,55 @@ name: Android emulator smoke test
 on:
   workflow_dispatch:
     inputs:
+      game:
+        description: Registered game id (selects its environment and source repository)
+        type: string
+        default: build-pipeline-test
       release:
-        description: Public release tag to test
+        description: Source release tag to test, e.g. stores-v0.1.0
         required: true
         type: string
 permissions:
   contents: read
 jobs:
   smoke:
+    environment: ${{ inputs.game }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      GH_TOKEN: ${{ github.token }}
       RELEASE: ${{ inputs.release }}
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve registered game
+        id: game
+        env:
+          GAME_ID: ${{ inputs.game }}
+        run: |
+          node <<'JS'
+          const fs=require('fs');
+          const g=require('./games.json').find(g=>g.id===process.env.GAME_ID && g.enabled);
+          if(!g || !/^Jolly-Panda-Works\/[A-Za-z0-9_.-]+$/.test(g.repository)) throw Error('Unknown game');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,`repository=${g.repository}\nname=${g.repository.split('/')[1]}\n`);
+          JS
+      - uses: actions/create-github-app-token@v3
+        id: app
+        with:
+          client-id: ${{ vars.BUILD_APP_CLIENT_ID }}
+          private-key: ${{ secrets.BUILD_APP_PRIVATE_KEY }}
+          owner: Jolly-Panda-Works
+          repositories: ${{ steps.game.outputs.name }}
+          permission-contents: read
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
       - name: Download test APK
-        run: gh release download "$RELEASE" --repo "$GITHUB_REPOSITORY" --pattern '*-bazaar.apk' --dir apk
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GAME_ID: ${{ inputs.game }}
+        run: |
+          SOURCE_REPOSITORY=$(node -e 'const g=require("./games.json").find(g=>g.id===process.env.GAME_ID && g.enabled); if(!g) throw Error("Unknown game"); console.log(g.repository)')
+          gh release download "$RELEASE" --repo "$SOURCE_REPOSITORY" --pattern '*-bazaar.apk' --dir apk
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
