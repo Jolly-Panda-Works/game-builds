@@ -13,6 +13,9 @@ if(process.argv[1]?.endsWith('store-broker.mjs')) {
   if(op==='poll') {
     const pending=await broker('approved');
     const games=JSON.parse(fs.readFileSync('games.json','utf8'));
+    // Direct dispatch carries only a hint: the authenticated claim still proves owner approval.
+    // This avoids a newly-written KV key being absent from an eventually-consistent list.
+    if(/^[a-f0-9]{24}$/.test(process.env.REQUEST_ID||'')&&games.some(g=>g.id===process.env.APPROVAL_GAME&&g.enabled&&g.storePublishing?.enabled))pending.push({id:process.env.REQUEST_ID,game:process.env.APPROVAL_GAME});
     const requests=[...new Map(pending.filter(r=>/^[a-f0-9]{24}$/.test(r.id)&&games.some(g=>g.id===r.game&&g.enabled&&g.storePublishing?.enabled)).map(r=>[r.id,{id:r.id,game:r.game}])).values()];
     fs.appendFileSync(process.env.GITHUB_OUTPUT,`requests=${JSON.stringify(requests)}\nhas_requests=${requests.length>0}\n`);
     const status=await broker('status-pending');
@@ -21,7 +24,14 @@ if(process.argv[1]?.endsWith('store-broker.mjs')) {
   } else if(op==='offer') {
     await broker('offer',{repository:process.env.SOURCE_REPOSITORY,releaseId:Number(process.env.RELEASE_ID)});
   } else if(op==='claim') {
-    const r=await broker('claim',{id:process.env.REQUEST_ID,runId:process.env.GITHUB_RUN_ID});
+    let r;
+    for(let attempt=0;attempt<19;attempt++) {
+      try {r=await broker('claim',{id:process.env.REQUEST_ID,runId:process.env.GITHUB_RUN_ID});break;}
+      catch(error) {
+        if(!/HTTP (404|409)$/.test(error.message)||attempt===18)throw error;
+        await new Promise(resolve=>setTimeout(resolve,5000));
+      }
+    }
     const games=JSON.parse(fs.readFileSync('games.json','utf8')),g=games.find(g=>g.enabled&&g.storePublishing?.enabled&&g.id===r.game&&g.repository===r.repository);
     if(!g||r.game!==process.env.GAME_ID)throw Error('Unregistered claim');
     fs.writeFileSync('.local/store-request.json',JSON.stringify(r),{mode:0o600});

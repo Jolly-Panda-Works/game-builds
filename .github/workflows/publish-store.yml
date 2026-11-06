@@ -8,6 +8,14 @@ on:
         description: Optional registered game to refresh store status (read only)
         type: string
         required: false
+      request_id:
+        description: Existing owner-approved request ID (never constitutes approval)
+        type: string
+        required: false
+      approval_game:
+        description: Registered game of the existing approved request
+        type: string
+        required: false
 permissions:
   contents: read
 concurrency:
@@ -35,6 +43,8 @@ jobs:
           STORE_APPROVAL_URL: ${{ vars.STORE_APPROVAL_URL }}
           STORE_APPROVAL_SECRET: ${{ secrets.STORE_APPROVAL_SECRET }}
           STATUS_GAME: ${{ inputs.status_game }}
+          REQUEST_ID: ${{ inputs.request_id }}
+          APPROVAL_GAME: ${{ inputs.approval_game }}
   publish:
     needs: poll
     if: needs.poll.outputs.has_requests == 'true'
