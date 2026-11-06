@@ -4,5 +4,11 @@
     "repository": "Jolly-Panda-Works/build-pipeline-test",
     "branch": "Iranian-store",
     "enabled": true
+  },
+  {
+    "id": "choo-choo-pop",
+    "repository": "Jolly-Panda-Works/choo-choo-pop",
+    "branch": "Iranian-store",
+    "enabled": true
   }
 ]
