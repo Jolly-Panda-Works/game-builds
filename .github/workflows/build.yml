@@ -140,6 +140,8 @@ jobs:
           BAZAAR_RSA_KEY: ${{ vars.BAZAAR_RSA_KEY }}
           MYKET_PUBLIC_KEY: ${{ vars.MYKET_PUBLIC_KEY }}
           BAZAAR_DEVELOPER_ID: ${{ vars.BAZAAR_DEVELOPER_ID }}
+          VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL || vars.GAME_SERVER_URL || '' }}
+          VITE_PUBLIC_URL: ${{ vars.VITE_PUBLIC_URL || '' }}
         run: |
           mapfile -t STORES < <(node -e 'for(const s of [...require("./game.config.json").stores,"debug"]) console.log(s)')
           for STORE in "${STORES[@]}"; do
