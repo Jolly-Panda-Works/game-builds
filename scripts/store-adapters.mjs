@@ -13,6 +13,39 @@ const codes=value=>{
   return found;
 };
 const highest=value=>Math.max(0,...codes(value));
+function identity(value) {
+  let version;
+  const walk=x=>{
+    if(!x||typeof x!=='object')return;
+    for(const [key,v]of Object.entries(x)) {
+      if(/^version_?name$/i.test(key)&&typeof v==='string')version=v;
+      else if(v&&typeof v==='object')walk(v);
+    }
+  };walk(value);
+  const code=highest(value);
+  return {version:version||(/^\d+\.\d+\.\d+$/.test(value?.title||'')?value.title:null),versionCode:code||null,status:String(value?.status||'')};
+}
+export async function readStoreStatus(store,appId,token,{fetchImpl=fetch}={}) {
+  if(!token)throw Error(`Missing ${store} API credential`);
+  if(store==='bazaar') {
+    const api=client('https://api.pishkhan.cafebazaar.ir/v1/apps/releases/',{'CAFEBAZAAR-PISHKHAN-API-SECRET':token},fetchImpl);
+    const result={};
+    for(const [field,path]of Object.entries({published:'last-published/',submitted:'last-committed/',draft:'last-uncommitted/'})) {
+      const data=await api('GET',path);
+      if(data.type==='success'&&data.release)result[field]=identity(data.release);
+      else if(data.type==='error'&&data.release==null)result[field]=null;
+      else throw Error(`Unexpected Bazaar ${field} response`);
+    }
+    return result;
+  }
+  if(store!=='myket')throw Error('Unsupported store');
+  const api=client(`https://developer.myket.ir/api/partners/applications/${encodeURIComponent(appId)}/release-bundle`,{'X-Access-Token':token},fetchImpl);
+  const data=await api('GET','?offset=1&limit=100');
+  if(!Array.isArray(data.releases))throw Error('Unexpected Myket releases response');
+  const rows=data.releases.slice().sort((a,b)=>highest(b)-highest(a));
+  // Approved is not proof of publication: manual-release bundles can remain approved.
+  return {published:rows.find(x=>x.status==='Published')?identity(rows.find(x=>x.status==='Published')):null,submitted:rows.find(x=>!['JustCreated','Published'].includes(x.status))?identity(rows.find(x=>!['JustCreated','Published'].includes(x.status))):null,draft:rows.find(x=>x.status==='JustCreated')?identity(rows.find(x=>x.status==='JustCreated')):null,publicationUnconfirmed:!rows.some(x=>x.status==='Published')};
+}
 function client(base,headers,fetchImpl) {
   return async(method,path='',body)=>{
     for(let attempt=0;attempt<4;attempt++) {
@@ -31,7 +64,7 @@ export async function publishBazaar(r,file,token,{fetchImpl=fetch}={}) {
   const api=client('https://api.pishkhan.cafebazaar.ir/v1/apps/releases/',{'CAFEBAZAAR-PISHKHAN-API-SECRET':token},fetchImpl);
   for(const endpoint of ['last-committed/','last-published/']) {
     const existing=await api('GET',endpoint);
-    if(existing.type==='success'&&highest(existing.release)>=r.versionCode) return {status:'submitted',summary:'This versionCode is already submitted or published; no duplicate upload was made.'};
+    if(existing.type==='success'&&highest(existing.release)>=r.versionCode) throw Error('Bazaar already has this or a newer versionCode submitted/published. No upload or publication-setting change was made; check current store status.');
   }
   const existing=await api('GET','last-uncommitted/');
   const resume=existing.type==='success'&&highest(existing.release)===r.versionCode&&r.priorDraftSha256===r.asset.sha256;
@@ -46,15 +79,15 @@ export async function publishBazaar(r,file,token,{fetchImpl=fetch}={}) {
     if(result.package&&Number(result.package.version_code)!==r.versionCode)throw Error('Bazaar uploaded versionCode mismatch');
   }
   if(r.mode==='draft')return {status:'draft-uploaded',summary:'Signed APK uploaded as a draft. No review or public publication was requested.'};
-  await api('POST','commit/',{changelog_fa:r.notes.fa,changelog_en:r.notes.en,developer_note:`${r.version}; owner-approved request ${r.id}`,auto_publish:true,staged_rollout_percentage:100});
-  return {status:'submitted',summary:'Sent for store review with the approved changelog; automatic publication after store approval is enabled.'};
+  await api('POST','commit/',{changelog_fa:r.notes.fa,changelog_en:r.notes.en,developer_note:`${r.version}; owner-approved request ${r.id}`,auto_publish:r.mode==='live',staged_rollout_percentage:100});
+  return {status:'submitted',summary:r.mode==='live'?'Sent for store review; automatic publication after store approval is enabled.':'Sent for store review; manual publication after approval is required in the store dashboard.'};
 }
 export async function publishMyket(r,file,token,{fetchImpl=fetch}={}) {
   if(!token)throw Error('Missing MYKET_ACCESS_TOKEN');
   const api=client(`https://developer.myket.ir/api/partners/applications/${encodeURIComponent(r.appId)}/release-bundle`,{'X-Access-Token':token},fetchImpl);
   const list=await api('GET','?offset=1&limit=20');
   if(!Array.isArray(list.releases))throw Error('Unexpected Myket releases response');
-  if(list.releases.some(x=>['WaitingForApproval','Approved'].includes(x.status)&&highest(x)>=r.versionCode)) return {status:'submitted',summary:'This versionCode is already submitted or published; no duplicate upload was made.'};
+  if(list.releases.some(x=>['WaitingForApproval','Approved','Published'].includes(x.status)&&highest(x)>=r.versionCode)) throw Error('Myket already has this or a newer versionCode submitted/published. No upload or publication-setting change was made; check current store status.');
   const draft=list.releases.find(x=>x.status==='JustCreated');
   const resume=draft&&highest(draft)===r.versionCode&&r.priorDraftSha256===r.asset.sha256;
   if(draft&&!resume) {
@@ -67,6 +100,6 @@ export async function publishMyket(r,file,token,{fetchImpl=fetch}={}) {
     await api('PUT','/upload',form);
   }
   if(r.mode==='draft')return {status:'draft-uploaded',summary:'Signed APK and changelog uploaded as a draft. No review or public publication was requested.'};
-  await api('POST','/commit',{isManualPublish:false,message:`${r.version}; owner-approved request ${r.id}`});
-  return {status:'submitted',summary:'Sent for store review with the approved changelog; automatic publication after store approval is enabled.'};
+  await api('POST','/commit',{isManualPublish:r.mode==='review',message:`${r.version}; owner-approved request ${r.id}`});
+  return {status:'submitted',summary:r.mode==='live'?'Sent for store review; automatic publication after store approval is enabled.':'Sent for store review; manual publication after approval is required in the store dashboard.'};
 }

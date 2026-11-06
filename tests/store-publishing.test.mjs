@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';
 import { validateApproval,approvedPayload,digest } from '../scripts/store-policy.mjs';
-import { publishBazaar,publishMyket } from '../scripts/store-adapters.mjs';
+import { publishBazaar,publishMyket,readStoreStatus } from '../scripts/store-adapters.mjs';
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'panda-publisher-')),file=path.join(dir,'test.apk');fs.writeFileSync(file,'fake-signed-bytes');
 function fixture(mode='draft') {
   const r={id:'a'.repeat(24),game:'choo-choo-pop',repository:'Jolly-Panda-Works/choo-choo-pop',releaseId:1,tag:'stores-v1.0.0',version:'1.0.0',versionCode:1000000,sourceSha:'b'.repeat(40),appId:'com.jollypanda.choochoopop',asset:{id:2,name:'game-v1.0.0-bazaar.apk',sha256:'c'.repeat(64),size:17},store:'bazaar',notes:{fa:'تغییرات دقیق',en:'Exact changes'},mode,revision:1,approvedBy:'7',approvedAt:Date.now(),expiresAt:Date.now()+100000,status:'publishing',claim:'claim'};
@@ -58,4 +58,20 @@ test('replacement is allowed only for the exact snapshot explicitly approved by 
   r.replaceDraft.fingerprint='0'.repeat(64);
   const changed=mock('myket',true);await assert.rejects(publishMyket(r,file,'fake-token',changed));
   assert.ok(!changed.calls.some(c=>c.options.method==='DELETE'));
+});
+test('manual publication mode commits for review without automatic release in both stores',async()=>{
+  const r=fixture('review');validateApproval(r,g);
+  const a=mock('bazaar');await publishBazaar(r,file,'fake-token',a);
+  assert.equal(JSON.parse(a.calls.find(c=>c.url.endsWith('/commit/')).options.body).auto_publish,false);
+  const b=mock('myket');await publishMyket(r,file,'fake-token',b);
+  assert.equal(JSON.parse(b.calls.find(c=>c.url.endsWith('/commit')).options.body).isManualPublish,true);
+});
+test('status reads never write and never confuse Myket approval with publication',async()=>{
+  const calls=[];
+  const fetchImpl=async(url,options)=>{calls.push(options.method);return Response.json({releases:[{title:'1.0.0',status:'Approved',packages:[{versionCode:1000000}]},{title:'0.9.0',status:'Published',packages:[{versionCode:9000}]}]});};
+  const status=await readStoreStatus('myket','com.test.app','fake',{fetchImpl});
+  assert.equal(status.published.version,'0.9.0');assert.equal(status.submitted.status,'Approved');assert.deepEqual(calls,['GET']);
+  const bazaarCalls=[];
+  const bazaar=await readStoreStatus('bazaar','com.test.app','fake',{fetchImpl:async(url,options)=>{bazaarCalls.push(options.method);return Response.json({type:'success',release:{packages:[{version_name:'1.2.3',version_code:1002003}]}});}});
+  assert.equal(bazaar.published.version,'1.2.3');assert.equal(bazaar.draft.versionCode,1002003);assert.deepEqual(bazaarCalls,['GET','GET','GET']);
 });

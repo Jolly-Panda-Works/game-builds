@@ -3,6 +3,11 @@ on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
+    inputs:
+      status_game:
+        description: Optional registered game to refresh store status (read only)
+        type: string
+        required: false
 permissions:
   contents: read
 concurrency:
@@ -15,6 +20,8 @@ jobs:
     outputs:
       requests: ${{ steps.poll.outputs.requests }}
       has_requests: ${{ steps.poll.outputs.has_requests }}
+      status_games: ${{ steps.poll.outputs.status_games }}
+      has_status: ${{ steps.poll.outputs.has_status }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -27,6 +34,7 @@ jobs:
         env:
           STORE_APPROVAL_URL: ${{ vars.STORE_APPROVAL_URL }}
           STORE_APPROVAL_SECRET: ${{ secrets.STORE_APPROVAL_SECRET }}
+          STATUS_GAME: ${{ inputs.status_game }}
   publish:
     needs: poll
     if: needs.poll.outputs.has_requests == 'true'
@@ -74,3 +82,35 @@ jobs:
       - name: Report result to owner
         if: always()
         run: node scripts/store-broker.mjs result
+      - name: Refresh actual store state
+        if: always() && steps.claim.outcome == 'success'
+        run: node scripts/store-status.mjs
+        env:
+          GAME_ID: ${{ matrix.request.game }}
+          BAZAAR_PISHKHAN_TOKEN: ${{ secrets.BAZAAR_PISHKHAN_TOKEN }}
+          MYKET_ACCESS_TOKEN: ${{ secrets.MYKET_ACCESS_TOKEN }}
+  status:
+    needs: poll
+    if: needs.poll.outputs.has_status == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ matrix.game }}
+    strategy:
+      fail-fast: false
+      matrix:
+        game: ${{ fromJSON(needs.poll.outputs.status_games) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read store APIs and report to admin
+        run: node scripts/store-status.mjs
+        env:
+          GAME_ID: ${{ matrix.game }}
+          STORE_APPROVAL_URL: ${{ vars.STORE_APPROVAL_URL }}
+          STORE_APPROVAL_SECRET: ${{ secrets.STORE_APPROVAL_SECRET }}
+          BAZAAR_PISHKHAN_TOKEN: ${{ secrets.BAZAAR_PISHKHAN_TOKEN }}
+          MYKET_ACCESS_TOKEN: ${{ secrets.MYKET_ACCESS_TOKEN }}

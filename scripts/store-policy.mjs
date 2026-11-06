@@ -6,7 +6,7 @@ export function approvedPayload(r) {
 export const digest=v=>createHash('sha256').update(JSON.stringify(canonical(v))).digest('hex');
 export function validateApproval(r,g) {
   if(!g?.enabled||!g.storePublishing?.enabled||g.id!==r.game||g.repository!==r.repository||g.storePublishing.appId!==r.appId)throw Error('Game not enabled for store publication');
-  if(!['draft','live'].includes(r.mode)||r.mode==='live'&&g.storePublishing.mode!=='live')throw Error('Live publication is disabled');
+  if(!['draft','review','live'].includes(r.mode)||r.mode!=='draft'&&g.storePublishing.mode!=='live')throw Error('Live publication is disabled');
   if(!['bazaar','myket'].includes(r.store)||!r.asset.name.endsWith(`-${r.store}.apk`)||/debug/i.test(r.asset.name))throw Error('Debug or mismatched APK cannot be published');
   if(r.status!=='publishing'||!r.claim||!r.approvedBy||!Number.isFinite(r.approvedAt)||r.expiresAt<Date.now())throw Error('Missing or expired approval');
   if(!r.notes.fa.trim()||!r.notes.en.trim()||r.notes.fa.length>1500||r.notes.en.length>1500)throw Error('Invalid approved changelog');
