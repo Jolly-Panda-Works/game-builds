@@ -75,3 +75,12 @@ test('status reads never write and never confuse Myket approval with publication
   const bazaar=await readStoreStatus('bazaar','com.test.app','fake',{fetchImpl:async(url,options)=>{bazaarCalls.push(options.method);return Response.json({type:'success',release:{packages:[{version_name:'1.2.3',version_code:1002003}]}});}});
   assert.equal(bazaar.published.version,'1.2.3');assert.equal(bazaar.draft.versionCode,1002003);assert.deepEqual(bazaarCalls,['GET','GET','GET']);
 });
+test('real store status variants: Bazaar not-exists and localized Myket statuses',async()=>{
+  const empty=await readStoreStatus('bazaar','com.test.app','fake',{fetchImpl:async()=>Response.json({type:'not-exists',release:{}})});
+  assert.equal(empty.published,null);assert.equal(empty.draft,null);
+  const status=await readStoreStatus('myket','com.test.app','fake',{fetchImpl:async url=>{
+    assert.ok(url.includes('offset=0'));
+    return Response.json({releases:[{status:'در حال بررسی توسط ادمین',versionCode:1006001},{status:'منتشر شده',versionCode:1005000}]});
+  }});
+  assert.equal(status.published.versionCode,1005000);assert.equal(status.submitted.versionCode,1006001);assert.equal(status.publicationUnconfirmed,false);
+});

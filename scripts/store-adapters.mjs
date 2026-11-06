@@ -13,6 +13,9 @@ const codes=value=>{
   return found;
 };
 const highest=value=>Math.max(0,...codes(value));
+const state=x=>String(x?.status||'').trim().replaceAll('ي','ی').replaceAll('ك','ک');
+const isPublished=x=>['Published','منتشر شده','منتشرشده','انتشار یافته'].includes(state(x));
+const isDraft=x=>['JustCreated','پیش نویس','پیش‌نویس','ایجاد شده'].includes(state(x));
 function identity(value) {
   let version;
   const walk=x=>{
@@ -33,7 +36,7 @@ export async function readStoreStatus(store,appId,token,{fetchImpl=fetch}={}) {
     for(const [field,path]of Object.entries({published:'last-published/',submitted:'last-committed/',draft:'last-uncommitted/'})) {
       const data=await api('GET',path);
       if(data.type==='success'&&data.release)result[field]=identity(data.release);
-      else if(['error','success'].includes(data.type)&&data.release==null)result[field]=null;
+      else if(data.type==='not-exists'||['error','success'].includes(data.type)&&data.release==null)result[field]=null;
       else throw Error(`Unexpected Bazaar ${field} response (type=${String(data.type)}, fields=${Object.keys(data).join(',')}, release=${data.release===null?'null':typeof data.release})`);
     }
     return result;
@@ -44,7 +47,8 @@ export async function readStoreStatus(store,appId,token,{fetchImpl=fetch}={}) {
   if(!Array.isArray(data.releases))throw Error('Unexpected Myket releases response');
   const rows=data.releases.slice().sort((a,b)=>highest(b)-highest(a));
   // Approved is not proof of publication: manual-release bundles can remain approved.
-  return {published:rows.find(x=>x.status==='Published')?identity(rows.find(x=>x.status==='Published')):null,submitted:rows.find(x=>!['JustCreated','Published'].includes(x.status))?identity(rows.find(x=>!['JustCreated','Published'].includes(x.status))):null,draft:rows.find(x=>x.status==='JustCreated')?identity(rows.find(x=>x.status==='JustCreated')):null,publicationUnconfirmed:!rows.some(x=>x.status==='Published')};
+  const published=rows.find(isPublished),submitted=rows.find(x=>!isDraft(x)&&!isPublished(x)),draft=rows.find(isDraft);
+  return {published:published?identity(published):null,submitted:submitted?identity(submitted):null,draft:draft?identity(draft):null,publicationUnconfirmed:!published};
 }
 function client(base,headers,fetchImpl) {
   return async(method,path='',body)=>{
@@ -87,8 +91,8 @@ export async function publishMyket(r,file,token,{fetchImpl=fetch}={}) {
   const api=client(`https://developer.myket.ir/api/partners/applications/${encodeURIComponent(r.appId)}/release-bundle`,{'X-Access-Token':token},fetchImpl);
   const list=await api('GET','?offset=0&limit=20');
   if(!Array.isArray(list.releases))throw Error('Unexpected Myket releases response');
-  if(list.releases.some(x=>['WaitingForApproval','Approved','Published'].includes(x.status)&&highest(x)>=r.versionCode)) throw Error('Myket already has this or a newer versionCode submitted/published. No upload or publication-setting change was made; check current store status.');
-  const draft=list.releases.find(x=>x.status==='JustCreated');
+  if(list.releases.some(x=>!isDraft(x)&&highest(x)>=r.versionCode)) throw Error('Myket already has this or a newer versionCode in a non-draft state. No upload or publication-setting change was made; check current store status.');
+  const draft=list.releases.find(isDraft);
   const resume=draft&&highest(draft)===r.versionCode&&r.priorDraftSha256===r.asset.sha256;
   if(draft&&!resume) {
     if(r.replaceDraft?.fingerprint!==digest(draft))throw replacement(draft);
