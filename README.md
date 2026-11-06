@@ -10,6 +10,8 @@ The workflows no longer use SOURCE_RELEASE_TOKEN or SOURCE_DEPLOY_KEY. Keep old 
 
 ## Each game
 
+Existing games can implement a custom `scripts/build.mjs` with `game.config.json.nativeProject=committed` to retain their established native project and application id. An empty `stores` list means Debug-only until an original release signing key is available; it must not cause a new release key to be invented. Mini Sumo retains its existing release secrets. Grid Rush retains its committed fixed debug keystore. Legacy application ids (including com.useffarahmand.vazehpeykar) are retained during migration. The smoke workflow's standalone-debug edition resolves the real launch activity from APK metadata, so applicationId suffixes do not change the activity namespace.
+
 Create a private repository from game-template with all branches. Set game.config.json: name, slug, appId=com.jollypanda.<slug>, optional web=true. main is development, Iranian-store is the build branch. Both stores use the same package and versionCode, and the same permanent per-game signing key.
 
 Run scripts/register-game.ps1 -GameId <id> -RepositoryName <repo-name>. This adds topic tgbot, sets BUILD_MODE=central to skip duplicate private builds, creates an environment, and updates LOCAL games.json. It does NOT install/authorize the App or create signing keys. Select the game in the App installation, then configure environment secrets KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD. Optional billing variables BAZAAR_RSA_KEY and MYKET_PUBLIC_KEY belong in that game's environment. Never reuse the disposable pipeline-test key for real games.

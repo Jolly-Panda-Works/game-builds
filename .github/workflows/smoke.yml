@@ -10,6 +10,11 @@ on:
         description: Source release tag to test, e.g. stores-v0.1.0
         required: true
         type: string
+      edition:
+        description: APK edition to install
+        type: choice
+        options: [bazaar, standalone-debug]
+        default: bazaar
 permissions:
   contents: read
 jobs:
@@ -48,9 +53,10 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GAME_ID: ${{ inputs.game }}
+          EDITION: ${{ inputs.edition }}
         run: |
           SOURCE_REPOSITORY=$(node -e 'const g=require("./games.json").find(g=>g.id===process.env.GAME_ID && g.enabled); if(!g) throw Error("Unknown game"); console.log(g.repository)')
-          gh release download "$RELEASE" --repo "$SOURCE_REPOSITORY" --pattern '*-bazaar.apk' --dir apk
+          gh release download "$RELEASE" --repo "$SOURCE_REPOSITORY" --pattern "*-$EDITION.apk" --dir apk
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
