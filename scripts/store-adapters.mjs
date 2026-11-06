@@ -33,14 +33,14 @@ export async function readStoreStatus(store,appId,token,{fetchImpl=fetch}={}) {
     for(const [field,path]of Object.entries({published:'last-published/',submitted:'last-committed/',draft:'last-uncommitted/'})) {
       const data=await api('GET',path);
       if(data.type==='success'&&data.release)result[field]=identity(data.release);
-      else if(data.type==='error'&&data.release==null)result[field]=null;
-      else throw Error(`Unexpected Bazaar ${field} response`);
+      else if(['error','success'].includes(data.type)&&data.release==null)result[field]=null;
+      else throw Error(`Unexpected Bazaar ${field} response (type=${String(data.type)}, fields=${Object.keys(data).join(',')}, release=${data.release===null?'null':typeof data.release})`);
     }
     return result;
   }
   if(store!=='myket')throw Error('Unsupported store');
   const api=client(`https://developer.myket.ir/api/partners/applications/${encodeURIComponent(appId)}/release-bundle`,{'X-Access-Token':token},fetchImpl);
-  const data=await api('GET','?offset=1&limit=100');
+  const data=await api('GET','?offset=0&limit=20');
   if(!Array.isArray(data.releases))throw Error('Unexpected Myket releases response');
   const rows=data.releases.slice().sort((a,b)=>highest(b)-highest(a));
   // Approved is not proof of publication: manual-release bundles can remain approved.
@@ -85,7 +85,7 @@ export async function publishBazaar(r,file,token,{fetchImpl=fetch}={}) {
 export async function publishMyket(r,file,token,{fetchImpl=fetch}={}) {
   if(!token)throw Error('Missing MYKET_ACCESS_TOKEN');
   const api=client(`https://developer.myket.ir/api/partners/applications/${encodeURIComponent(r.appId)}/release-bundle`,{'X-Access-Token':token},fetchImpl);
-  const list=await api('GET','?offset=1&limit=20');
+  const list=await api('GET','?offset=0&limit=20');
   if(!Array.isArray(list.releases))throw Error('Unexpected Myket releases response');
   if(list.releases.some(x=>['WaitingForApproval','Approved','Published'].includes(x.status)&&highest(x)>=r.versionCode)) throw Error('Myket already has this or a newer versionCode submitted/published. No upload or publication-setting change was made; check current store status.');
   const draft=list.releases.find(x=>x.status==='JustCreated');
