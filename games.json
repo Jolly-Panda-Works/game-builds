@@ -1,0 +1,8 @@
+[
+  {
+    "id": "build-pipeline-test",
+    "repository": "Jolly-Panda-Works/build-pipeline-test",
+    "branch": "Iranian-store",
+    "enabled": true
+  }
+]

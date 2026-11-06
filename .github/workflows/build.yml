@@ -1,0 +1,165 @@
+name: Build private Android games
+on:
+  workflow_dispatch:
+    inputs:
+      game:
+        description: Registered game id, or all
+        type: string
+        default: all
+      bump:
+        type: choice
+        default: patch
+        options: [patch, minor, major]
+  schedule:
+    - cron: '*/15 * * * *'
+  push:
+    branches: [main]
+    paths: [games.json]
+permissions:
+  contents: read
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      games: ${{ steps.plan.outputs.games }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: plan
+        env:
+          GAME: ${{ inputs.game || 'all' }}
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const games=JSON.parse(fs.readFileSync('games.json')).filter(g=>g.enabled && (process.env.GAME==='all'||g.id===process.env.GAME));
+          if (!games.length) throw Error('No registered game selected');
+          for (const g of games) {
+            if (!/^[a-z0-9-]+$/.test(g.id)||!/^Jolly-Panda-Works\/[A-Za-z0-9_.-]+$/.test(g.repository)||g.branch!=='Iranian-store') throw Error('Invalid registration');
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,`games=${JSON.stringify(games)}\n`);
+          JS
+  build:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: ${{ matrix.game.id }}
+    permissions:
+      contents: write
+    concurrency:
+      group: game-${{ matrix.game.id }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        game: ${{ fromJSON(needs.plan.outputs.games) }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_REPOSITORY: ${{ matrix.game.repository }}
+      SOURCE_BRANCH: ${{ matrix.game.branch }}
+      GAME_ID: ${{ matrix.game.id }}
+      PUBLISH_STORES: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read private game using its dedicated deploy key
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.game.repository }}
+          ref: ${{ matrix.game.branch }}
+          path: source
+          fetch-depth: 0
+          ssh-key: ${{ secrets.SOURCE_DEPLOY_KEY }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Resolve version and skip already published source
+        id: version
+        env:
+          BUMP: ${{ inputs.bump || 'patch' }}
+        working-directory: source
+        run: |
+          SOURCE_SHA=$(git rev-parse HEAD)
+          TAG=$(git tag --points-at HEAD | grep -E '^stores-v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+          if [ -n "$TAG" ]; then VERSION="${TAG#stores-v}"; else VERSION=$(node scripts/version.mjs); fi
+          RELEASE="$GAME_ID-stores-v$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          echo "tag=stores-v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
+          if gh release view "$RELEASE" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'build=false' >> "$GITHUB_OUTPUT"
+            echo "Already built: $RELEASE" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'build=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-java@v4
+        if: steps.version.outputs.build == 'true'
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+        if: steps.version.outputs.build == 'true'
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.version.outputs.build == 'true'
+      - name: Install and test
+        if: steps.version.outputs.build == 'true'
+        working-directory: source
+        run: npm ci && npm test
+      - name: Build store APKs and optional web archive; never submit to stores
+        if: steps.version.outputs.build == 'true'
+        working-directory: source
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          BAZAAR_RSA_KEY: ${{ vars.BAZAAR_RSA_KEY }}
+          MYKET_PUBLIC_KEY: ${{ vars.MYKET_PUBLIC_KEY }}
+        run: |
+          mapfile -t STORES < <(node -e 'for(const s of require("./game.config.json").stores) console.log(s)')
+          for STORE in "${STORES[@]}"; do
+            export STORE
+            # Isolate each store's native dependencies and key resources.
+            rm -rf android
+            npm run build:android
+          done
+      - name: Verify installable package and signatures
+        if: steps.version.outputs.build == 'true'
+        working-directory: source
+        run: |
+          AAPT=$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)
+          SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          APP_ID=$(node -p 'require("./game.config.json").appId')
+          for APK in out/*.apk; do
+            "$SIGNER" verify "$APK"
+            "$AAPT" dump badging "$APK" | tee "$RUNNER_TEMP/badging.txt"
+            grep -F "package: name='$APP_ID'" "$RUNNER_TEMP/badging.txt"
+            grep -F 'launchable-activity:' "$RUNNER_TEMP/badging.txt"
+          done
+      - name: Tag exact private source after successful builds
+        if: steps.version.outputs.build == 'true'
+        working-directory: source
+        env:
+          DEPLOY_KEY: ${{ secrets.SOURCE_DEPLOY_KEY }}
+          SOURCE_TAG: ${{ steps.version.outputs.tag }}
+          SOURCE_SHA: ${{ steps.version.outputs.sha }}
+        run: |
+          KEY="$RUNNER_TEMP/source-tag-key"
+          trap 'rm -f "$KEY"' EXIT
+          printf '%s\n' "$DEPLOY_KEY" > "$KEY"
+          chmod 600 "$KEY"
+          HOSTS="$RUNNER_TEMP/github-known-hosts"
+          gh api meta --jq '.ssh_keys[] | "github.com " + .' > "$HOSTS"
+          export GIT_SSH_COMMAND="ssh -i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$HOSTS"
+          if ! git rev-parse "$SOURCE_TAG" >/dev/null 2>&1; then git tag "$SOURCE_TAG" "$SOURCE_SHA"; fi
+          git push "git@github.com:$SOURCE_REPOSITORY.git" "refs/tags/$SOURCE_TAG"
+      - name: Publish binaries in the public build repository
+        if: steps.version.outputs.build == 'true'
+        env:
+          RELEASE: ${{ steps.version.outputs.release }}
+          SOURCE_SHA: ${{ steps.version.outputs.sha }}
+        run: |
+          gh release create "$RELEASE" source/out/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$RELEASE" --notes "Android builds of $GAME_ID from private source revision $SOURCE_SHA. No store API was called."
+          echo "Release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE" >> "$GITHUB_STEP_SUMMARY"
