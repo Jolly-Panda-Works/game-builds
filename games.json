@@ -3,13 +3,23 @@
     "id": "choo-choo-pop",
     "repository": "Jolly-Panda-Works/choo-choo-pop",
     "branch": "Iranian-store",
-    "enabled": true
+    "enabled": true,
+    "storePublishing": {
+      "enabled": true,
+      "mode": "live",
+      "appId": "com.jollypanda.choochoopop"
+    }
   },
   {
     "id": "mini-sumo",
     "repository": "Jolly-Panda-Works/mini-sumo",
     "branch": "Iranian-store",
-    "enabled": true
+    "enabled": true,
+    "storePublishing": {
+      "enabled": true,
+      "mode": "live",
+      "appId": "com.jollypanda.mini_sumo"
+    }
   },
   {
     "id": "grid-rush-web",

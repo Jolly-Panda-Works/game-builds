@@ -1,6 +1,8 @@
 # Jolly Panda Android builder
 
-Build registered private games on public GitHub-hosted runners and publish binaries in each SOURCE game's Releases. No store API is called. Optional web archives are configured by each game; no desktop outputs exist.
+Owner-approved store delivery is documented in [STORE-PUBLISHING.fa.md](STORE-PUBLISHING.fa.md). Building a release alone never authorizes a store submission. The first delivery per game/store is a draft trial, followed by a separate explicit live approval. Only signed store APKs can enter that queue.
+
+Build registered private games on public GitHub-hosted runners and publish binaries in each SOURCE game's Releases. The build job never calls store APIs; delivery is a separate owner-approved workflow. Optional web archives are configured by each game; no desktop outputs exist.
 
 ## Shared GitHub App
 

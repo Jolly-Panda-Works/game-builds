@@ -1,0 +1,76 @@
+name: Publish owner-approved store builds
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: store-publication
+  cancel-in-progress: false
+jobs:
+  poll:
+    if: vars.STORE_PUBLISHING_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      requests: ${{ steps.poll.outputs.requests }}
+      has_requests: ${{ steps.poll.outputs.has_requests }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: poll
+        run: node scripts/store-broker.mjs poll
+        env:
+          STORE_APPROVAL_URL: ${{ vars.STORE_APPROVAL_URL }}
+          STORE_APPROVAL_SECRET: ${{ secrets.STORE_APPROVAL_SECRET }}
+  publish:
+    needs: poll
+    if: needs.poll.outputs.has_requests == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ matrix.request.game }}
+    strategy:
+      fail-fast: false
+      matrix:
+        request: ${{ fromJSON(needs.poll.outputs.requests) }}
+    env:
+      STORE_APPROVAL_URL: ${{ vars.STORE_APPROVAL_URL }}
+      STORE_APPROVAL_SECRET: ${{ secrets.STORE_APPROVAL_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Claim the owner's frozen approval
+        id: claim
+        run: node scripts/store-broker.mjs claim
+        env:
+          REQUEST_ID: ${{ matrix.request.id }}
+          GAME_ID: ${{ matrix.request.game }}
+      - uses: actions/create-github-app-token@v3
+        id: app
+        with:
+          client-id: ${{ vars.BUILD_APP_CLIENT_ID }}
+          private-key: ${{ secrets.BUILD_APP_PRIVATE_KEY }}
+          owner: Jolly-Panda-Works
+          repositories: ${{ steps.claim.outputs.repository_name }}
+          permission-contents: read
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Verify exact approved APK and submit only that version
+        run: node scripts/publish-store.mjs
+        env:
+          SOURCE_READ_TOKEN: ${{ steps.app.outputs.token }}
+          BAZAAR_PISHKHAN_TOKEN: ${{ secrets.BAZAAR_PISHKHAN_TOKEN }}
+          MYKET_ACCESS_TOKEN: ${{ secrets.MYKET_ACCESS_TOKEN }}
+      - name: Report result to owner
+        if: always()
+        run: node scripts/store-broker.mjs result

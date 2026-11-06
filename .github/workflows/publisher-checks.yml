@@ -1,0 +1,17 @@
+name: Store publisher checks
+on:
+  push:
+    paths: ['scripts/store-*.mjs', 'scripts/publish-store.mjs', 'scripts/create-publication.mjs', 'tests/**', '.github/workflows/publish-store.yml']
+  pull_request:
+    paths: ['scripts/**', 'tests/**', '.github/workflows/publish-store.yml']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test tests/store-publishing.test.mjs

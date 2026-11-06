@@ -5,7 +5,7 @@ on:
       game:
         description: Registered game id (selects its environment and source repository)
         type: string
-        default: build-pipeline-test
+        default: choo-choo-pop
       release:
         description: Source release tag to test, e.g. stores-v0.1.0
         required: true

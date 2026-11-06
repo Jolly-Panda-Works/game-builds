@@ -171,6 +171,11 @@ jobs:
             grep -F 'launchable-activity:' "$RUNNER_TEMP/badging.txt"
             if [[ "$APK" == *-debug.apk ]]; then grep -F 'application-debuggable' "$RUNNER_TEMP/badging.txt"; fi
           done
+      - name: Prepare owner-reviewable store manifest (no upload to stores)
+        if: steps.version.outputs.build == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: node scripts/create-publication.mjs --game "$GAME_ID" --source source --out source/out --version "$VERSION"
       - name: Tag exact private source after successful builds
         if: steps.version.outputs.build == 'true'
         working-directory: source

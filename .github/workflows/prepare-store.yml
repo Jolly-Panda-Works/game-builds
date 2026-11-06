@@ -1,0 +1,77 @@
+name: Prepare store review for an existing release
+on:
+  workflow_dispatch:
+    inputs:
+      game:
+        description: Registered store-ready game id
+        required: true
+        type: string
+        default: choo-choo-pop
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.game }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: game
+        env:
+          GAME_ID: ${{ inputs.game }}
+        run: |
+          node <<'JS'
+          const fs=require('fs');const g=require('./games.json').find(g=>g.enabled&&g.storePublishing?.enabled&&g.id===process.env.GAME_ID);
+          if(!g)throw Error('Game not enabled');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,`repository=${g.repository}\nname=${g.repository.split('/')[1]}\n`);
+          JS
+      - uses: actions/create-github-app-token@v3
+        id: app
+        with:
+          client-id: ${{ vars.BUILD_APP_CLIENT_ID }}
+          private-key: ${{ secrets.BUILD_APP_PRIVATE_KEY }}
+          owner: Jolly-Panda-Works
+          repositories: ${{ steps.game.outputs.name }}
+          permission-contents: write
+      - id: release
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          SOURCE_REPOSITORY: ${{ steps.game.outputs.repository }}
+        run: |
+          gh release view --repo "$SOURCE_REPOSITORY" --json tagName,databaseId > "$RUNNER_TEMP/release.json"
+          node <<'JS'
+          const fs=require('fs'),r=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/release.json'));
+          if(!/^stores-v\d+\.\d+\.\d+$/.test(r.tagName))throw Error('Select a central source release');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,`tag=${r.tagName}\nversion=${r.tagName.slice(8)}\nid=${r.databaseId}\n`);
+          JS
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.game.outputs.repository }}
+          ref: ${{ steps.release.outputs.tag }}
+          token: ${{ steps.app.outputs.token }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Hash existing release APKs and prepare review text
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          SOURCE_REPOSITORY: ${{ steps.game.outputs.repository }}
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+          GAME_ID: ${{ inputs.game }}
+        run: |
+          mkdir -p review-out
+          gh release download "$TAG" --repo "$SOURCE_REPOSITORY" --pattern '*.apk' --dir review-out
+          node scripts/create-publication.mjs --game "$GAME_ID" --source source --out review-out --version "$VERSION"
+          gh release upload "$TAG" review-out/store-publication.json --repo "$SOURCE_REPOSITORY" --clobber
+      - name: Show the owner approval cards (does not approve anything)
+        run: node scripts/store-broker.mjs offer
+        env:
+          STORE_APPROVAL_URL: ${{ vars.STORE_APPROVAL_URL }}
+          STORE_APPROVAL_SECRET: ${{ secrets.STORE_APPROVAL_SECRET }}
+          SOURCE_REPOSITORY: ${{ steps.game.outputs.repository }}
+          RELEASE_ID: ${{ steps.release.outputs.id }}
