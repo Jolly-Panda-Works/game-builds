@@ -140,7 +140,7 @@ jobs:
           BAZAAR_RSA_KEY: ${{ vars.BAZAAR_RSA_KEY }}
           MYKET_PUBLIC_KEY: ${{ vars.MYKET_PUBLIC_KEY }}
         run: |
-          mapfile -t STORES < <(node -e 'for(const s of require("./game.config.json").stores) console.log(s)')
+          mapfile -t STORES < <(node -e 'for(const s of [...require("./game.config.json").stores,"debug"]) console.log(s)')
           for STORE in "${STORES[@]}"; do
             export STORE
             # Isolate each store's native dependencies and key resources.
@@ -155,10 +155,13 @@ jobs:
           SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
           APP_ID=$(node -p 'require("./game.config.json").appId')
           for APK in out/*.apk; do
+            EXPECTED_ID="$APP_ID"
+            if [[ "$APK" == *-debug.apk ]]; then EXPECTED_ID="$APP_ID.debug"; fi
             "$SIGNER" verify "$APK"
             "$AAPT" dump badging "$APK" | tee "$RUNNER_TEMP/badging.txt"
-            grep -F "package: name='$APP_ID'" "$RUNNER_TEMP/badging.txt"
+            grep -F "package: name='$EXPECTED_ID'" "$RUNNER_TEMP/badging.txt"
             grep -F 'launchable-activity:' "$RUNNER_TEMP/badging.txt"
+            if [[ "$APK" == *-debug.apk ]]; then grep -F 'application-debuggable' "$RUNNER_TEMP/badging.txt"; fi
           done
       - name: Tag exact private source after successful builds
         if: steps.version.outputs.build == 'true'
