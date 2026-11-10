@@ -38,5 +38,70 @@
     "repository": "Jolly-Panda-Works/vazeh-peykar-3d",
     "branch": "Iranian-store",
     "enabled": true
+  },
+  {
+    "id": "nostalgia-duel",
+    "name": "دوئل نوستالژی",
+    "repository": "Jolly-Panda-Works/nostalgia-duel",
+    "branch": "Iranian-store",
+    "enabled": true,
+    "editions": [
+      "debug"
+    ]
+  },
+  {
+    "id": "bomber-girl",
+    "name": "Bomber Girl",
+    "repository": "Jolly-Panda-Works/Bomber-Girl",
+    "appId": "com.jollypanda.bombergirl",
+    "webBuild": "static",
+    "version": "0.1.0",
+    "branch": "main",
+    "enabled": true,
+    "builder": "web"
+  },
+  {
+    "id": "detective-files",
+    "name": "Detective Files",
+    "repository": "Jolly-Panda-Works/detective-files",
+    "appId": "com.jollypanda.detectivefiles",
+    "webBuild": "static",
+    "versionFile": "VERSION.json",
+    "versionPath": "version",
+    "branch": "main",
+    "enabled": true,
+    "builder": "web"
+  },
+  {
+    "id": "wild-guest-list",
+    "name": "Wild Guest List",
+    "repository": "Jolly-Panda-Works/wild-guest-list",
+    "appId": "com.jollypanda.wildguestlist",
+    "webBuild": "static",
+    "versionFile": "data/config.json",
+    "versionPath": "app.version",
+    "branch": "main",
+    "enabled": true,
+    "builder": "web"
+  },
+  {
+    "id": "dungeon-boom",
+    "name": "Dungeon Boom",
+    "repository": "Jolly-Panda-Works/dungeon-boom",
+    "appId": "com.jollypanda.dungeonboom",
+    "webBuild": "vite",
+    "branch": "main",
+    "enabled": true,
+    "builder": "web"
+  },
+  {
+    "id": "vazeh-peykar",
+    "name": "واژه‌پیکار دوبعدی",
+    "repository": "Jolly-Panda-Works/vazeh-peykar",
+    "appId": "com.jollypanda.vazehpeykar2d",
+    "webBuild": "vite",
+    "branch": "main",
+    "enabled": true,
+    "builder": "web"
   }
 ]
