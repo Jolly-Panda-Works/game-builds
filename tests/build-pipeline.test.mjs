@@ -5,9 +5,11 @@ import {selectGames} from '../scripts/build-plan.mjs';
 import {allocateVersion} from '../scripts/resolve-build.mjs';
 import {makeReport,renderReports} from '../scripts/build-report.mjs';
 const registry = JSON.parse(fs.readFileSync(new URL('../games.json',import.meta.url)));
-test('all actual games are registered, excluding template and disposable test',()=>{
+test('only the original five games and Nostalgia Duel are enabled',()=>{
   const games = selectGames(registry);
-  assert.equal(games.length,11);
+  assert.equal(games.length,6);
+  assert.equal(registry.filter(g=>!g.enabled).length,5);
+  assert(!games.some(g=>g.builder==='web'));
   assert(games.some(g=>g.id==='nostalgia-duel'));
   assert(!games.some(g=>/template|pipeline-test/.test(g.id)));
   assert.throws(()=>selectGames([...registry,registry[0]]),/Duplicate/);

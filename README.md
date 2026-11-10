@@ -24,11 +24,8 @@ Use **Run workflow**, choose a registered game id (or `all`), and set `rebuild=t
 | pirate-s-fortune | Iranian-store | Debug, Web | [Releases](https://github.com/Jolly-Panda-Works/Pirate-s-Fortune/releases/latest) |
 | vazeh-peykar-3d | Iranian-store | Debug, Web | [Releases](https://github.com/Jolly-Panda-Works/vazeh-peykar-3d/releases/latest) |
 | nostalgia-duel | Iranian-store | Debug, Web | [Releases](https://github.com/Jolly-Panda-Works/nostalgia-duel/releases/latest) |
-| bomber-girl | main | Debug, Web | [Releases](https://github.com/Jolly-Panda-Works/Bomber-Girl/releases/latest) |
-| detective-files | main | Debug, Web | [Releases](https://github.com/Jolly-Panda-Works/detective-files/releases/latest) |
-| wild-guest-list | main | Debug, Web | [Releases](https://github.com/Jolly-Panda-Works/wild-guest-list/releases/latest) |
-| dungeon-boom | main | Debug, Web | [Releases](https://github.com/Jolly-Panda-Works/dungeon-boom/releases/latest) |
-| vazeh-peykar | main | Debug, Web | [Releases](https://github.com/Jolly-Panda-Works/vazeh-peykar/releases/latest) |
+
+Only the six games above are enabled. Bomber Girl, Detective Files, Wild Guest List, Dungeon Boom and 2D Vazeh Peykar are explicitly disabled (`enabled: false`) at the owner's request: scheduled/all builds skip them, and manual selection rejects them. Their adapter registrations are retained for possible future use. A 2D Vazeh Peykar test release created before that request is retained; disabling a game does not delete existing downloads.
 
 The registry intentionally excludes `game-template`, `build-pipeline-test`, and `.github`. Each new repository must be selected in the existing `jolly-panda-game-builder` App installation before its first build. `editions: ["debug"]` restricts Nostalgia Duel to Debug until its original release signing credentials are configured in the central environment; it never falls back to publishing an unsigned store APK.
 
