@@ -23,6 +23,7 @@ test('success without a release cannot masquerade as a completed build; failed b
   const game=registry[0], release={tagName:'stores-v1.2.3',url:'https://github.com/test/releases/tag/stores-v1.2.3',assets:[{name:'game-debug.apk',url:'https://github.com/test/releases/download/stores-v1.2.3/game-debug.apk'}]};
   assert.equal(makeReport(game,{},undefined,'true','1.2.3').status,'failed');
   assert.equal(makeReport(game,{},release,'false','1.2.3').status,'unchanged');
+  assert.equal(makeReport(game,{app:{outcome:'failure'}},undefined,'','').status,'blocked');
   const failed=makeReport(game,{compile:{outcome:'failure'}},release,'true','1.2.3');
   assert.equal(failed.status,'failed');
   const md=renderReports([failed]); assert.match(md,/compile/); assert.match(md,/\[game-debug.apk\]\(https:\/\//);

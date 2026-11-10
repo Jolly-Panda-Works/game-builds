@@ -15,15 +15,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const game = JSON.parse(fs.readFileSync('games.json')).find(g => g.id === process.env.GAME_ID);
   const sha = run(['rev-parse','HEAD']);
   // Listing releases must succeed: a permission/API failure is not an absent release.
-  const releases = JSON.parse(execFileSync('gh',['api','--paginate',`repos/${game.repository}/releases?per_page=100`],{encoding:'utf8'}).replace(/\]\s*\[/g, ','));
+  const releases = execFileSync('gh',['api','--paginate',`repos/${game.repository}/releases?per_page=100`,'--jq','.[] | select(.draft == false) | .tag_name'],{encoding:'utf8'}).trim().split('\n');
   const tags = run(['tag','--list']).split('\n');
   const exact = run(['tag','--points-at','HEAD']).split('\n');
-  const existing = releases.find(r => !r.draft && /^stores-v\d+\.\d+\.\d+$/.test(r.tag_name) && exact.includes(r.tag_name));
+  const existing = releases.find(tag => /^stores-v\d+\.\d+\.\d+$/.test(tag) && exact.includes(tag));
   let base = game.version || '0.1.0';
   if(fs.existsSync('source/package.json')) base = JSON.parse(fs.readFileSync('source/package.json')).version || base;
   if(game.versionFile) { const data = JSON.parse(fs.readFileSync(`source/${game.versionFile}`)); base = game.versionPath.split('.').reduce((v,k)=>v[k],data); }
   const build = !existing || process.env.REBUILD === 'true';
-  const version = build ? allocateVersion(tags,base,process.env.BUMP || 'patch') : existing.tag_name.slice(8);
+  const version = build ? allocateVersion(tags,base,process.env.BUMP || 'patch') : existing.slice(8);
   const release = `stores-v${version}`;
   const config = game.builder === 'web' ? {name:game.name,slug:game.id.replaceAll('-',''),appId:game.appId,orientation:game.orientation || 'portrait',stores:[],web:true} : JSON.parse(fs.readFileSync('source/game.config.json'));
   if(game.builder === 'web') fs.writeFileSync('source/game.config.json',JSON.stringify(config,null,2)+'\n');

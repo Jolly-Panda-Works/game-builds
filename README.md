@@ -11,6 +11,7 @@ Open [Build private Android games](https://github.com/Jolly-Panda-Works/game-bui
 - **Built / ساخته شد**: a new release was built and published in the source repository.
 - **Unchanged / قبلاً ساخته شده**: that exact source commit already has a published release. No new APK was built; links point to the existing output.
 - **Failed / ناموفق**: inspect the reported failing step. Token/checkout errors require App access; tests/build/signature errors require fixing that stage. An API outage or permission error is never treated as a missing release.
+- **App access required / نیازمند بررسی دسترسی App**: token creation failed; check that the repository is selected in the App installation, then check App credentials and Contents permissions. The report links to the installation settings.
 - **Cancelled or missing report**: the job was cancelled or did not produce a report; it is not counted as successful.
 
 Use **Run workflow**, choose a registered game id (or `all`), and set `rebuild=true` only when a fresh build of unchanged source is wanted. This allocates a NEW version and does not replace an existing release. Downloads from private repositories require signing into an authorized GitHub account. Debug APKs are for testing and use a separate `.debug` application id; they are not signed store updates.

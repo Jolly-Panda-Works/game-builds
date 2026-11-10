@@ -3,19 +3,19 @@ import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 export function makeReport(game, steps, release, build, version, lookupError = '') {
   const failed = Object.entries(steps).filter(([,s])=>s.outcome === 'failure').map(([id])=>id);
-  const status = failed.length ? 'failed' : !release ? 'failed' : build === 'false' ? 'unchanged' : 'built';
+  const status = failed.includes('app') ? 'blocked' : failed.length ? 'failed' : !release ? 'failed' : build === 'false' ? 'unchanged' : 'built';
   return {id:game.id,name:game.name || game.id,repository:game.repository,branch:game.branch,status,version:version || release?.tagName?.replace(/^stores-v/,''),failed,
     releaseUrl:release?.url || `https://github.com/${game.repository}/releases`,assets:release?.assets?.map(a=>({name:a.name,url:a.url})) || [],lookupError,
     runUrl:`${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`};
 }
 export function renderReports(reports) {
-  const labels = {built:'✅ ساخته شد / Built',unchanged:'⏭️ قبلاً ساخته شده / Unchanged',failed:'❌ ناموفق / Failed',cancelled:'⚠️ لغو یا گزارش ناقص / Cancelled or missing report'};
+  const labels = {built:'✅ ساخته شد / Built',unchanged:'⏭️ قبلاً ساخته شده / Unchanged',blocked:'🔒 نیازمند بررسی دسترسی App / App access required',failed:'❌ ناموفق / Failed',cancelled:'⚠️ لغو یا گزارش ناقص / Cancelled or missing report'};
   const safe = text => String(text || '').replace(/[|\r\n]/g,' ');
   const rows = reports.map(r => {
     const downloads = r.assets.filter(a=>/\.(apk|aab|zip)$/.test(a.name)).map(a=>`[${safe(a.name)}](${a.url})`).join('<br>') || `[Releases](${r.releaseUrl})`;
     return `| ${safe(r.name)} | ${labels[r.status]}${r.failed.length ? `<br>مرحله: ${r.failed.map(safe).join(', ')}` : ''} | ${safe(r.branch)} | ${safe(r.version) || '—'} | ${downloads} |`;
   });
-  return `## وضعیت بیلد بازی‌ها / Android build results\n\n| بازی | وضعیت | شاخه | نسخه | دانلود خروجی |\n|---|---|---|---|---|\n${rows.join('\n')}\n\nفایل‌های Debug مخصوص آزمایش هستند. دانلود از ریپوهای خصوصی به ورود با حساب مجاز GitHub نیاز دارد. Unchanged یعنی APK جدیدی ساخته نشد؛ لینک‌ها خروجی قبلی همان سورس هستند. برای ساخت مجدد، Run workflow → rebuild=true (نسخهٔ جدید).\n\n${reports.filter(r=>r.lookupError).map(r=>`- ${safe(r.name)}: دریافت جزئیات دانلود ناموفق؛ لینک Releases را بررسی کنید.`).join('\n')}\n`;
+  return `## وضعیت بیلد بازی‌ها / Android build results\n\n| بازی | وضعیت | شاخه | نسخه | دانلود خروجی |\n|---|---|---|---|---|\n${rows.join('\n')}\n\nفایل‌های Debug مخصوص آزمایش هستند. دانلود از ریپوهای خصوصی به ورود با حساب مجاز GitHub نیاز دارد. Unchanged یعنی APK جدیدی ساخته نشد؛ لینک‌ها خروجی قبلی همان سورس هستند. برای ساخت مجدد، Run workflow → rebuild=true (نسخهٔ جدید).\n\n${reports.some(r=>r.status==='blocked') ? 'برای خطای App، ریپوی بازی را در [Selected repositories نصب App](https://github.com/organizations/Jolly-Panda-Works/settings/installations/179114397) بررسی کنید؛ سپس اعتبار App و مجوز Contents را کنترل کنید.\n\n' : ''}${reports.filter(r=>r.lookupError).map(r=>`- ${safe(r.name)}: دریافت جزئیات دانلود ناموفق؛ لینک Releases را بررسی کنید.`).join('\n')}\n`;
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const games = JSON.parse(fs.readFileSync('games.json'));
